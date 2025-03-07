@@ -1,3 +1,4 @@
+use std::char;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -41,7 +42,7 @@ pub struct BMPRes {
 }
 
 // basic impl基本信息读取的实现
-impl BMPRes{
+impl BMPRes {
     pub fn get_bf_size(&mut self) -> u32 {
         // 通过buffer获取bf_size并更新
         self.bf_size = u32::from_le_bytes(self.bmp_buffer[2..6].try_into().unwrap());
@@ -114,7 +115,6 @@ impl BMPRes{
     pub fn get_bi_clr_important(&mut self) -> u32 {
         self.bi_clr_important = u32::from_le_bytes(self.bmp_buffer[50..54].try_into().unwrap());
         self.bi_clr_important
-
     }
 
     pub fn get_bmi_colors(&mut self) -> Vec<u32> {
@@ -131,15 +131,11 @@ impl BMPRes{
         }
         self.bmi_colors = color_table;
         self.bmi_colors.clone()
-
     }
-
-
 }
 
 // advanced impl
 impl BMPRes {
-
     pub fn print_self(&self) {
         println!("bf_size: {}", self.bf_size);
         println!("bf_reserved1: {}", self.bf_reserved1);
@@ -184,9 +180,8 @@ impl BMPRes {
 
         // 计算像素在缓冲区中的位置
         // BMP图像存储是从底部向上的，所以y坐标需要反转
-        let this_pixel_start = offbits as usize
-            + (height - y) as usize * bytes_per_row
-            + x as usize * bytes_per_pixel;
+        let this_pixel_start =
+            offbits as usize + (height - y) as usize * bytes_per_row + x as usize * bytes_per_pixel;
 
         match bit_count {
             8 => {
@@ -238,16 +233,13 @@ impl BMPRes {
 
         // 计算像素在缓冲区中的位置
         // BMP图像存储是从底部向上的，所以y坐标需要反转
-        let mut this_pixel_start = offbits as usize
-            + (height  - n) as usize * bytes_per_row;
+        let mut this_pixel_start = offbits as usize + (height - n) as usize * bytes_per_row;
 
         for _ in 0..n {
             for _ in 0..width {
                 match bit_count {
                     8 => {
                         self.bmp_buffer[this_pixel_start] = (color & 0xFF) as u8;
-                        self.bmp_buffer[this_pixel_start + 1] = ((color >> 8) & 0xFF) as u8;
-                        self.bmp_buffer[this_pixel_start + 2] = ((color >> 16) & 0xFF) as u8;
                     }
                     24 => {
                         self.bmp_buffer[this_pixel_start] = (color & 0xFF) as u8;
@@ -262,7 +254,6 @@ impl BMPRes {
             }
             this_pixel_start += padding;
         }
-
         Ok(())
     }
 
@@ -279,15 +270,15 @@ impl BMPRes {
         let color_table_start = 54;
         let color_table_end = self.bf_offbits as usize;
         let mut color_table_bytes = Vec::new();
-        
+
         for r in 0..16 {
             for g in 0..16 {
                 // 按 BGRA 顺序构造颜色（这是 BMP 文件中的标准格式）
-                let b = 0u8;                // 蓝色 = 0
-                let g = (g * 16) as u8;     // 绿色 = 0,16,32,...,240
-                let r = (r * 16) as u8;     // 红色 = 0,16,32,...,240
-                let a = 0u8;                // Alpha = 0 (0xFF 为完全不透明)
-                
+                let b = 0u8; // 蓝色 = 0
+                let g = (g * 16) as u8; // 绿色 = 0,16,32,...,240
+                let r = (r * 16) as u8; // 红色 = 0,16,32,...,240
+                let a = 0u8; // Alpha = 0 (0xFF 为完全不透明)
+
                 // 添加字节到颜色表，按 BGRA 顺序
                 color_table_bytes.push(b);
                 color_table_bytes.push(g);
@@ -295,12 +286,109 @@ impl BMPRes {
                 color_table_bytes.push(a);
             }
         }
-        
+
         // 更新缓冲区中的颜色表
-        self.bmp_buffer.splice(color_table_start..color_table_end, color_table_bytes);
-        
+        self.bmp_buffer
+            .splice(color_table_start..color_table_end, color_table_bytes);
+
         // 更新内部结构的颜色表
         self.get_bmi_colors();
+    }
+
+    // 压缩成n*n的生成字符图像并保存到txt文件
+    // " " (空格) → "." → ":" → "-" → "=" → "+" → "*" → "#" → "%" → "@"
+    pub fn generate_char_image(&self, path: &str, n: u32) -> Result<(), io::Error> {
+        let char_map = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
+        let mut char_image = String::new();
+
+        let width = self.bi_width;
+        let height = self.bi_height;
+        let bit_count = self.bi_bit_count;
+        let offbits = self.bf_offbits;
+
+        // 确保n不为0，避免除零错误
+        let zoom = width.max(1) / n.max(1);
+        if zoom == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Scale factor too large",
+            ));
+        }
+
+        // 计算每个像素占用的字节数
+        let bytes_per_pixel = bit_count as usize / 8;
+
+        // 计算每行的字节数（包括填充）
+        let row_bytes_without_padding = width as usize * bytes_per_pixel;
+        let padding = (4 - (row_bytes_without_padding % 4)) % 4;
+        let bytes_per_row = row_bytes_without_padding + padding;
+
+        // 处理每个缩放后的行
+        for y in 0..n {
+            // 计算在原图中对应的行范围
+            let y_start = (height * y) / n;
+            let y_end = (height * (y + 1)) / n;
+
+            // 处理每个缩放后的列
+            for x in 0..n {
+                let x_start = (width * x) / n;
+                let x_end = (width * (x + 1)) / n;
+
+                let mut sum = 0;
+                let mut count = 0;
+
+                // 计算区域内像素的平均值
+                for orig_y in y_start..y_end {
+                    for orig_x in x_start..x_end {
+                        // BMP存储是从底向上的，需要反转y坐标
+                        let y_pos = height - 1 - orig_y;
+                        let pixel_offset = offbits as usize
+                            + (y_pos as usize * bytes_per_row)
+                            + (orig_x as usize * bytes_per_pixel);
+
+                        // 安全检查，确保不会越界
+                        if pixel_offset + bytes_per_pixel <= self.bmp_buffer.len() {
+                            match bit_count {
+                                8 => {
+                                    let color_index = self.bmp_buffer[pixel_offset] as usize;
+                                    if color_index < self.bmi_colors.len() {
+                                        // 从颜色表获取颜色并计算灰度
+                                        let color = self.bmi_colors[color_index];
+                                        let r = ((color >> 16) & 0xFF) as u32;
+                                        let g = ((color >> 8) & 0xFF) as u32;
+                                        let b = (color & 0xFF) as u32;
+                                        sum += (r * 299 + g * 587 + b * 114) / 1000;
+                                        count += 1;
+                                    }
+                                }
+                                24 => {
+                                    let b = self.bmp_buffer[pixel_offset] as u32;
+                                    let g = self.bmp_buffer[pixel_offset + 1] as u32;
+                                    let r = self.bmp_buffer[pixel_offset + 2] as u32;
+                                    sum += (r * 299 + g * 587 + b * 114) / 1000;
+                                    count += 1;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                // 计算并添加对应的字符
+                if count > 0 {
+                    let avg = sum / count;
+                    let char_index = (avg * char_map.len() as u32 / 256) as usize;
+                    char_image.push(char_map[char_index.min(char_map.len() - 1)]);
+                } else {
+                    char_image.push(' ');
+                }
+            }
+            char_image.push('\n');
+        }
+
+        let mut file = File::create(path)?;
+        file.write_all(char_image.as_bytes())?;
+        Ok(())
     }
 }
 
@@ -376,4 +464,3 @@ pub fn bmp_reader(path: &str) -> Result<BMPRes, io::Error> {
 
     Ok(bmp_res)
 }
-
