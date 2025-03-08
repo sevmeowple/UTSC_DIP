@@ -180,8 +180,9 @@ impl BMPRes {
 
         // 计算像素在缓冲区中的位置
         // BMP图像存储是从底部向上的，所以y坐标需要反转
-        let this_pixel_start =
-            offbits as usize + (height - y) as usize * bytes_per_row + x as usize * bytes_per_pixel;
+        let this_pixel_start = offbits as usize
+            + (height - 1 - y) as usize * bytes_per_row
+            + x as usize * bytes_per_pixel;
 
         match bit_count {
             8 => {
@@ -194,11 +195,13 @@ impl BMPRes {
                 }
             }
             24 => {
-                pixel = u32::from_le_bytes(
-                    self.bmp_buffer[this_pixel_start..this_pixel_start + 3]
-                        .try_into()
-                        .unwrap(),
-                );
+                // 读取3字节(BGR)并扩展到4字节u32
+                let b = self.bmp_buffer[this_pixel_start] as u32;
+                let g = self.bmp_buffer[this_pixel_start + 1] as u32;
+                let r = self.bmp_buffer[this_pixel_start + 2] as u32;
+
+                // 构建ARGB格式的u32值
+                pixel = (r << 16) | (g << 8) | b;
             }
             _ => {
                 println!("Unsupported bit count");
