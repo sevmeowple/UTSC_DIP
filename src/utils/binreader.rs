@@ -160,6 +160,26 @@ impl BMPRes {
         }
     }
 
+    // 获取所有像素,并以矩阵形式返回
+    pub fn get_all_pixels(&self) -> Vec<Vec<u32>> {
+        let mut pixels = Vec::new();
+        let width = self.bi_width;
+        let height = self.bi_height;
+
+        for y in 0..height {
+            let mut row = Vec::new();
+            for x in 0..width {
+                match self.get_certain_pixel(x, y) {
+                    Ok(pixel) => row.push(pixel),
+                    Err(_) => row.push(0),
+                }
+            }
+            pixels.push(row);
+        }
+
+        pixels
+    }
+
     pub fn get_certain_pixel(&self, x: u32, y: u32) -> Result<u32, &str> {
         let mut pixel = 0;
         let width = self.bi_width;
@@ -274,20 +294,44 @@ impl BMPRes {
         let color_table_end = self.bf_offbits as usize;
         let mut color_table_bytes = Vec::new();
 
-        for r in 0..16 {
-            for g in 0..16 {
-                // 按 BGRA 顺序构造颜色（这是 BMP 文件中的标准格式）
-                let b = 0u8; // 蓝色 = 0
-                let g = (g * 16) as u8; // 绿色 = 0,16,32,...,240
-                let r = (r * 16) as u8; // 红色 = 0,16,32,...,240
-                let a = 0u8; // Alpha = 0 (0xFF 为完全不透明)
+        // 方案一
+        // for r in 0..16 {
+        //     for g in 0..16 {
+        //         // 按 BGRA 顺序构造颜色（这是 BMP 文件中的标准格式）
+        //         let b = 0u8; // 蓝色 = 0
+        //         let g = (g * 16) as u8; // 绿色 = 0,16,32,...,240
+        //         let r = (r * 16) as u8; // 红色 = 0,16,32,...,240
+        //         let a = 0u8; // Alpha = 0 (0xFF 为完全不透明)
 
-                // 添加字节到颜色表，按 BGRA 顺序
-                color_table_bytes.push(b);
-                color_table_bytes.push(g);
-                color_table_bytes.push(r);
-                color_table_bytes.push(a);
-            }
+        //         // 添加字节到颜色表，按 BGRA 顺序
+        //         color_table_bytes.push(b);
+        //         color_table_bytes.push(g);
+        //         color_table_bytes.push(r);
+        //         color_table_bytes.push(a);
+        //     }
+        // }
+        // 方案二,所有通道同时渐变r-0->255,g-255->128->255,b-255->0
+        // for n in 0..256{
+        //     let b = 255-n as u8;
+        //     let g = if n<128 {255} else {255-(n-128) as u8};
+        //     let r = n as u8;
+        //     let a = 0u8;
+        //     color_table_bytes.push(b);
+        //     color_table_bytes.push(g);
+        //     color_table_bytes.push(r);
+        //     color_table_bytes.push(a);
+        // }
+
+        // 方案三,所有通道同时渐变r-0->255,g-255->0,b-255->0
+        for n in 0..256 {
+            let b = 255 - n as u8;
+            let g = 255 - n as u8;
+            let r = n as u8;
+            let a = 0u8;
+            color_table_bytes.push(b);
+            color_table_bytes.push(g);
+            color_table_bytes.push(r);
+            color_table_bytes.push(a);
         }
 
         // 更新缓冲区中的颜色表
