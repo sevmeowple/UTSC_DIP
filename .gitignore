@@ -2,3 +2,11 @@
 Cargo.lock
 hw/*
 pics/*
+# 忽略python的__pycache__文件夹
+__pycache__/
+**/__pycache__/
+
+# 忽略图片文件
+*.png
+*.jpg
+*.bmp
