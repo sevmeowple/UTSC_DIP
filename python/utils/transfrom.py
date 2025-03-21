@@ -17,22 +17,25 @@ class TransType(Enum):
     HAAR = 4
     HADAMARD = 5
 
+
 class ColorMap(Enum):
     """颜色图枚举类"""
-    GRAY = 'gray'           # 灰度
-    VIRIDIS = 'viridis'     # 彩虹色
-    JET = 'jet'             # 喷射色
-    PLASMA = 'plasma'       # 等离子
-    INFERNO = 'inferno'     # 地狱火
-    MAGMA = 'magma'         # 岩浆
-    HOT = 'hot'             # 热度图
-    COOL = 'cool'           # 冷色调
-    RAINBOW = 'rainbow'     # 彩虹
-    HSV = 'hsv'             # HSV色彩空间
-    CIVIDIS = 'cividis'     # 色盲友好
-    TURBO = 'turbo'         # 增强版彩虹
-    BLUES = 'Blues'         # 蓝色系
-    REDS = 'Reds'           # 红色系
+
+    GRAY = "gray"  # 灰度
+    VIRIDIS = "viridis"  # 彩虹色
+    JET = "jet"  # 喷射色
+    PLASMA = "plasma"  # 等离子
+    INFERNO = "inferno"  # 地狱火
+    MAGMA = "magma"  # 岩浆
+    HOT = "hot"  # 热度图
+    COOL = "cool"  # 冷色调
+    RAINBOW = "rainbow"  # 彩虹
+    HSV = "hsv"  # HSV色彩空间
+    CIVIDIS = "cividis"  # 色盲友好
+    TURBO = "turbo"  # 增强版彩虹
+    BLUES = "Blues"  # 蓝色系
+    REDS = "Reds"  # 红色系
+
 
 @dataclass
 class TransMatrix:
@@ -88,13 +91,14 @@ class TransformUtils:
         DCT = np.zeros((size, size))
 
         # 为每个元素计算值
-        for i in range(size):
-            for j in range(size):
-                if i == 0:
-                    DCT[i, j] = 1 / np.sqrt(size)
-                else:
-                    DCT[i, j] = np.cos((j + 0.5) * i * np.pi / size) * np.sqrt(2 / size)
+        # 最后乘以系数
+        # u从0到size-1
+        for u in range(size):
+            for x in range(size):
+                DCT[u, x] = np.cos(u * (2 * x + 1) * np.pi / (2 * size))
 
+            DCT[u, :] *= np.sqrt(1 / size) if u == 0 else np.sqrt(2 / size)
+            
         return DCT
 
     def __createHaarMatrix(self, size: int):
@@ -189,41 +193,62 @@ class TransformUtils:
 
         return basis_images
 
-    def plotSpectrum(self,matrix: np.ndarray, FD: bool = True,magnitude_cmap:ColorMap = ColorMap.GRAY
-                     , XW: bool = True, phase_cmap:ColorMap = ColorMap.GRAY):
-        if FD:  # 绘制幅度谱
-            # 计算幅度谱并应用对数变换
-            magnitude_spectrum = np.abs(matrix)
-            # 避免log(0)
-            magnitude_spectrum = np.maximum(magnitude_spectrum, 1e-10)
-            log_spectrum = np.log2(magnitude_spectrum)
-            
-            # 移动零频率到中心
-            shifted_spectrum = np.fft.fftshift(log_spectrum)
-            
-            # 绘制图像而不是线图
-            plt.figure(figsize=(8, 6))
-            plt.imshow(shifted_spectrum, cmap=magnitude_cmap.value)
-            plt.colorbar(label='Log2 Magnitude')
-            plt.title("Magnitude Spectrum (Log Scale)")
-            plt.xlabel("Frequency")
-            plt.ylabel("Frequency")
-            plt.show()
-        if XW:  # 绘制相位谱
-            # 计算相位谱
-            phase_spectrum = np.angle(matrix)
-            
-            # 移动零频率到中心
-            shifted_phase = np.fft.fftshift(phase_spectrum)
-            
-            # 绘制图像而不是线图
-            plt.figure(figsize=(8, 6))
-            plt.imshow(shifted_phase, cmap=phase_cmap.value)
-            plt.colorbar(label='Phase (radians)')
-            plt.title("Phase Spectrum")
-            plt.xlabel("Frequency")
-            plt.ylabel("Frequency")
-            plt.show()
+    def plotSpectrum(
+        self,
+        matrix: np.ndarray,
+        FD: bool = True,
+        magnitude_cmap: ColorMap = ColorMap.GRAY,
+        XW: bool = True,
+        phase_cmap: ColorMap = ColorMap.GRAY,
+        transform_type: TransType = TransType.DFT,
+    ):
+        match transform_type:
+            case TransType.DFT:
+                if FD:  # 绘制幅度谱
+                    # 计算幅度谱并应用对数变换
+                    magnitude_spectrum = np.abs(matrix)
+                    # 避免log(0)
+                    magnitude_spectrum = np.maximum(magnitude_spectrum, 1e-10)
+                    log_spectrum = np.log1p(magnitude_spectrum)
+
+                    # 移动零频率到中心
+                    shifted_spectrum = np.fft.fftshift(log_spectrum)
+
+                    # 绘制图像而不是线图
+                    plt.figure(figsize=(8, 6))
+                    plt.imshow(shifted_spectrum, cmap=magnitude_cmap.value)
+                    plt.colorbar(label="Log2 Magnitude")
+                    plt.title("Magnitude Spectrum (Log Scale)")
+                    plt.xlabel("Frequency")
+                    plt.ylabel("Frequency")
+                    plt.show()
+                if XW:  # 绘制相位谱
+                    # 计算相位谱
+                    phase_spectrum = np.angle(matrix)
+
+                    # 移动零频率到中心
+                    shifted_phase = np.fft.fftshift(phase_spectrum)
+
+                    # 绘制图像而不是线图
+                    plt.figure(figsize=(8, 6))
+                    plt.imshow(shifted_phase, cmap=phase_cmap.value)
+                    plt.colorbar(label="Phase (radians)")
+                    plt.title("Phase Spectrum")
+                    plt.xlabel("Frequency")
+                    plt.ylabel("Frequency")
+                    plt.show()
+            case TransType.DCT:
+                spectrum = np.abs(matrix)
+                log_spectrum = np.log1p(np.maximum(spectrum, 1e-10))
+                
+                plt.figure(figsize=(8, 6))
+                plt.imshow(log_spectrum, cmap=magnitude_cmap.value)
+                plt.colorbar(label="Log2 Coefficient Magnitude")
+                plt.title("DCT Coefficient Spectrum")
+                plt.xlabel("Frequency")
+                plt.ylabel("Frequency")
+                plt.show()
+                
 
     def displayTransformBasisImages(self, size: int, transform_type: TransType):
         """
